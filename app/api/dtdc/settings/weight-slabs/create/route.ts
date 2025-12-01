@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/postgres";
-import { courierWeightSlabs } from "@/db/schema/pricing";
+import { courierWeightSlabs } from "@/db/schema";
 
 export async function POST(req: Request) {
   const body = await req.json();

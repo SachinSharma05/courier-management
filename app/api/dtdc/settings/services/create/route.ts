@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { courierServices } from "@/db/schema/pricing";
+import { courierServices } from "@/db/schema";
 import { db } from "@/lib/db/postgres";
 
 export async function POST(req: Request) {

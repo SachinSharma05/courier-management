@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/postgres";
-import { courierSurcharges } from "@/db/schema/pricing";
+import { courierSurcharges } from "@/db/schema";
 
 export async function POST(req: Request) {
   const b = await req.json();

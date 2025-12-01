@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/postgres";
-import { courierServices } from "@/db/schema/pricing";
+import { courierServices } from "@/db/schema";
 
 export async function GET() {
   const rows = await db.select().from(courierServices);
