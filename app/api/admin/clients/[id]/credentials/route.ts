@@ -1,0 +1,96 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db/postgres";
+import { users, clientCredentials } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
+import { encrypt, decrypt } from "@/lib/crypto/encryption";
+
+export async function GET(req: Request, context: any) {
+  const { id } = await context.params;
+  const userId = Number(id);
+
+  if (!userId || Number.isNaN(userId)) {
+    return NextResponse.json({ ok: false, error: "Invalid client id" }, { status: 400 });
+  }
+
+  const rows = await db.select().from(users).where(eq(users.id, userId));
+  if (!rows.length) {
+    return NextResponse.json({ ok: false, error: "Client not found" }, { status: 404 });
+  }
+
+  const user = rows[0];
+
+  let providerIds: number[] = [];
+  try {
+    if (Array.isArray(user.providers)) {
+      providerIds = user.providers.map(Number);
+    } else if (typeof user.providers === "string") {
+      providerIds = user.providers.split(",").map(x => Number(x.trim()));
+    }
+  } catch (_) {}
+
+  // Load stored credentials
+  const credsRows = await db
+    .select()
+    .from(clientCredentials)
+    .where(eq(clientCredentials.client_id, userId));
+
+  const creds: any = {
+    username: "",
+    password: "",
+    api_token: "",
+    api_key: "",
+  };
+
+  for (const row of credsRows) {
+    creds[row.env_key] = decrypt(row.encrypted_value);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    clientProviderIds: providerIds,
+    credentials: creds,
+  });
+}
+
+export async function PUT(req: Request, context: any) {
+  const { id } = await context.params;
+  const userId = Number(id);
+
+  if (!userId || Number.isNaN(userId)) {
+    return NextResponse.json({ ok: false, error: "Invalid client id" }, { status: 400 });
+  }
+
+  const body = await req.json();
+
+  const providerId = Number(body.providerId);
+  if (!providerId) {
+    return NextResponse.json({ ok: false, error: "ProviderId is required" });
+  }
+
+  const fields = ["username", "password", "api_token", "api_key"];
+
+  for (const key of fields) {
+    if (!body[key]) continue;
+
+    const encrypted = encrypt(body[key]);
+
+    await db
+      .insert(clientCredentials)
+      .values({
+        client_id: userId,
+        provider_id: providerId,
+        env_key: key,
+        encrypted_value: encrypted,
+      })
+      .onConflictDoUpdate({
+        target: [
+          clientCredentials.client_id,
+          clientCredentials.provider_id,
+          clientCredentials.env_key,
+        ],
+        set: { encrypted_value: encrypted },
+      });
+  }
+
+  return NextResponse.json({ ok: true });
+}

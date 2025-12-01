@@ -1,0 +1,1 @@
+ALTER TABLE "client_credentials" ADD CONSTRAINT "unique_credential_entry" UNIQUE("client_id","provider_id","env_key");
