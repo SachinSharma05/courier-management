@@ -23,8 +23,6 @@ export async function GET(req: Request, context: any) {
   try {
     if (Array.isArray(user.providers)) {
       providerIds = user.providers.map(Number);
-    } else if (typeof user.providers === "string") {
-      providerIds = user.providers.split(",").map(x => Number(x.trim()));
     }
   } catch (_) {}
 
