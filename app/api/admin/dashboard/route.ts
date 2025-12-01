@@ -135,21 +135,30 @@ export async function GET(req: Request) {
     const currentTrend = (await db.execute(currentTrendSql)).rows ?? [];
 
     /* -----------------------------
-       TREND - previous period (same window immediately before current window)
+    TREND - previous period
     ------------------------------ */
-    let prevTrend = [];
+    type TrendItem = {
+      label: string;
+      value: number;
+      period_sort: string | Date | null;
+    };
+
+    let prevTrend: TrendItem[] = [];
+
     if (filter !== "range") {
       const prevTrendSql = sql`
         SELECT ${sql.raw(labelExpr)} AS label,
-               COUNT(*)::int AS value,
-               DATE_TRUNC(${sql.raw(`'${truncate}'`)}, created_at) AS period_sort
+              COUNT(*)::int AS value,
+              DATE_TRUNC(${sql.raw(`'${truncate}'`)}, created_at) AS period_sort
         FROM consignments
         WHERE ${sql.raw(prevWhere)}
         ${sql.raw(provider === "all" ? "" : `AND LOWER(provider) = ${provider}`)}
         GROUP BY label, period_sort
         ORDER BY period_sort
       `;
-      prevTrend = (await db.execute(prevTrendSql)).rows ?? [];
+
+      const res = await db.execute(prevTrendSql);
+      prevTrend = res.rows as TrendItem[];
     }
 
     /* -----------------------------
