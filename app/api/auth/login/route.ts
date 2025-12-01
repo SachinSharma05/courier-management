@@ -5,6 +5,13 @@ import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { sessionOptions } from "@/lib/auth/session";
+import type { IronSession } from "iron-session";
+
+type SessionUser = {
+  id: number;
+  username: string;
+  role: string;
+};
 
 export async function POST(req: Request) {
   try {
@@ -12,10 +19,7 @@ export async function POST(req: Request) {
     const { username, password } = body;
 
     if (!username || !password) {
-      return NextResponse.json(
-        { ok: false, error: "Missing credentials" },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Missing credentials" }, { status: 400 });
     }
 
     const found = await db
@@ -25,48 +29,35 @@ export async function POST(req: Request) {
       .limit(1);
 
     if (found.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
     const user = found[0];
 
-    // Correct order: (hash, password)
     const ok = await verifyPassword(user.password_hash, password);
-
     if (!ok) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid credentials" },
-        { status: 401 }
-      );
+      return NextResponse.json({ ok: false, error: "Invalid credentials" }, { status: 401 });
     }
 
     const { getIronSession } = await import("iron-session");
     const res = NextResponse.json({
       ok: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      },
+      user: { id: user.id, username: user.username, role: user.role },
     });
 
     const session = await getIronSession(req, res, sessionOptions);
-    session.user = {
+
+    // ✅ Correct, compiler-friendly cast:
+    (session as unknown as IronSession<Record<string, unknown>> & { user?: SessionUser }).user = {
       id: user.id,
       username: user.username,
       role: user.role,
     };
-    await session.save();
 
+    await session.save();
     return res;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Login Error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
