@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { JSX, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import * as XLSX from "xlsx";
 import dayjs from "dayjs";
