@@ -6,7 +6,7 @@ import {
   courierServices,
   courierDistanceSlabs,
   courierSurcharges
-} from "@/db/schema/pricing";
+} from "@/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 
 // Map Indian regions into zones
