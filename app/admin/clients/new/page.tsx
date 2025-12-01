@@ -3,10 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+type ClientForm = {
+  username: string;
+  email: string;
+  company_name: string;
+  password: string;
+  providers: string[];
+};
+
 export default function AddClientPage() {
   const router = useRouter();
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ClientForm>({
     username: "",
     email: "",
     company_name: "",
