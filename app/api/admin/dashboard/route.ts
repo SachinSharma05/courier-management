@@ -41,7 +41,7 @@ function getPeriodIntervals(filter: string) {
 function buildProviderFilter(provider?: string) {
   if (!provider || provider === "all" || provider === "master") return sql``;
   // assuming your consignments table has 'provider' column; if not adjust
-  return sql`AND LOWER(${consignments.provider}) = ${provider.toLowerCase()}`;
+  return sql`AND LOWER(${consignments.providers}) = ${provider.toLowerCase()}`;
 }
 
 export async function GET(req: Request) {
