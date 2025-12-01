@@ -72,7 +72,7 @@ export async function GET(req: Request) {
       })
       .from(consignments)
       // apply provider filter here if required
-      .where(sql`${sql.raw(provider === "all" ? "TRUE" : `LOWER(${consignments.provider}) = ${provider}`)}`);
+      .where(sql`${sql.raw(provider === "all" ? "TRUE" : `LOWER(${consignments.providers}) = ${provider}`)}`);
 
     const statsRow = statsQuery[0] ?? { total: 0, delivered: 0, pending: 0, rto: 0 };
 
@@ -173,7 +173,7 @@ export async function GET(req: Request) {
     const latest = await db
       .select()
       .from(consignments)
-      .where(sql`${sql.raw(provider === "all" ? "TRUE" : `LOWER(${consignments.provider}) = ${provider}`)}`)
+      .where(sql`${sql.raw(provider === "all" ? "TRUE" : `LOWER(${consignments.providers}) = ${provider}`)}`)
       .orderBy(desc(consignments.lastUpdatedOn))
       .limit(10);
 
