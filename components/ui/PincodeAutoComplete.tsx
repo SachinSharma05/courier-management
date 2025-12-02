@@ -3,12 +3,29 @@
 import { useEffect, useState } from "react";
 import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
-export default function PincodeAutocomplete({ value, onSelect }) {
+type PincodeItem = {
+  id: number;
+  pincode: string;
+  office: string;
+  district: string;
+  state: string;
+};
+
+export default function PincodeAutocomplete({
+  value,
+  onSelect,
+}: {
+  value: string;
+  onSelect: (p: PincodeItem) => void;
+}) {
   const [query, setQuery] = useState(value || "");
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<PincodeItem[]>([]);
 
   useEffect(() => {
-    if (query.length < 2) return setResults([]);
+    if (query.length < 2) {
+      setTimeout(() => setResults([]), 0);
+      return;
+    }
 
     const controller = new AbortController();
 
