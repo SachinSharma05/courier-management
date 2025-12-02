@@ -23,13 +23,15 @@ import {
 const SIDEBAR_WIDE = "w-60";
 const SIDEBAR_NARROW = "w-16";
 
+interface SidebarProps {
+  sidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
 export default function Sidebar({
   sidebarOpen,
   setSidebarOpen,
-}: {
-  sidebarOpen: boolean;
-  setSidebarOpen: (v: boolean) => void;
-}) {
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
