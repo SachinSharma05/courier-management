@@ -1,4 +1,3 @@
-// components/admin/ProviderDashboardClient.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,11 +7,20 @@ import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowUpRight } from "lucide-react";
-import AnalyticsCard from "./AnalyticsCard";
+import AnalyticsCard, { ProviderCharts } from "./AnalyticsCard";
 
 export default function ProviderDashboardClient({ provider, title }: { provider: string; title?: string }) {
   const [stats, setStats] = useState({ total: 0, delivered: 0, pending: 0, rto: 0 });
-  const [charts, setCharts] = useState({ monthlyTrend: [], statusBreakdown: [] });
+  const [charts, setCharts] = useState<ProviderCharts>({
+    trend: {
+      current: [],
+      previous: [],
+      totalCurrent: 0,
+      totalPrev: 0,
+      changePercent: null,
+    },
+    statusBreakdown: [],
+  });
   const [latest, setLatest] = useState<any[]>([]);
   const [filter, setFilter] = useState<"daily" | "weekly" | "monthly" | "yearly" | "range">("monthly");
 
@@ -21,17 +29,49 @@ export default function ProviderDashboardClient({ provider, title }: { provider:
       const res = await fetch(`/api/provider/${provider}/dashboard`);
       const json = await res.json();
       if (!json.ok) return toast.error(json.error || "Failed to load dashboard");
-      setStats(json.stats ?? {});
-      setCharts(json.charts ?? { monthlyTrend: [], statusBreakdown: [] });
+
+      // set basic stats (unchanged)
+      setStats(json.stats ?? { total: 0, delivered: 0, pending: 0, rto: 0 });
       setLatest(json.latest ?? []);
+
+      // If backend already returns charts in the correct shape, use it.
+      // Otherwise map stats -> ProviderCharts so AnalyticsCard receives the required shape.
+      if (json.charts && json.charts.trend && json.charts.statusBreakdown) {
+        setCharts(json.charts as ProviderCharts);
+      } else {
+        const s = json.stats ?? { total: 0, delivered: 0, pending: 0, rto: 0 };
+
+        const mapped: ProviderCharts = {
+          trend: {
+            // current trend uses high-level buckets delivered/pending/rto
+            current: [
+              { label: "Delivered", value: s.delivered ?? 0 },
+              { label: "Pending", value: s.pending ?? 0 },
+              { label: "RTO", value: s.rto ?? 0 },
+            ],
+            previous: [], // no previous period data available from API
+            totalCurrent: s.total ?? 0,
+            totalPrev: 0,
+            changePercent: null,
+          },
+          statusBreakdown: [
+            { status: "Delivered", count: s.delivered ?? 0 },
+            { status: "Pending", count: s.pending ?? 0 },
+            { status: "RTO", count: s.rto ?? 0 },
+          ],
+        };
+
+        setCharts(mapped);
+      }
     } catch (e) {
+      console.error("Failed loading provider dashboard:", e);
       toast.error("Failed to load dashboard");
     }
   }
 
   useEffect(() => {
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -51,7 +91,7 @@ export default function ProviderDashboardClient({ provider, title }: { provider:
       </div>
 
       <AnalyticsCard
-        charts={{ all: charts, dtdc: charts, delhivery: charts, xpressbees: charts }}
+        charts={charts}
         filter={filter}
         onFilterChange={(f) => setFilter(f)}
       />
