@@ -38,9 +38,9 @@ export default function LabelGeneratorPage() {
       // 2) generate custom label pdf bytes (Uint8Array)
       const customBytes = await generateCustomLabel({
         awb,
-        company: "Masala Store Pvt Ltd",
+        company: "VIS Pvt Ltd",
         address: "Indore, MP",
-        phone: "+91 98765 43210",
+        phone: "+91 9340384339",
         sender: { name: "Sender", phone: "1111111111", pincode: "452001" },
         receiver: { name: "Receiver", phone: "2222222222", pincode: "110001" },
       });
@@ -49,7 +49,7 @@ export default function LabelGeneratorPage() {
       const merged = await mergePDFs(customBytes, dtdcBase64); // mergePDFs accepts base64 string too
 
       // 4) download merged PDF
-      const blob = new Blob([merged], { type: "application/pdf" });
+      const blob = new Blob([new Uint8Array(merged)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
