@@ -6,7 +6,7 @@ import { getServerSession } from "@/lib/auth/getServerSession";
 
 export async function GET(
   req: NextRequest,
-  context: { params: { provider: string } }
+  context: { params: Promise<{ provider: string }> }
 ) {
   try {
     const session = await getServerSession();
@@ -17,13 +17,13 @@ export async function GET(
       );
     }
 
-    const provider = context.params.provider.toLowerCase(); // dtdc / delhivery / xpressbees
+    // ⬅ MUST AWAIT HERE (fixes Vercel build error)
+    const { provider } = await context.params;
+    const providerKey = provider.toLowerCase();
     const clientId = session.user.id;
 
-    /* -------------------------
-       Provider filter FIXED
-    --------------------------*/
-    const providerFilter = sql`${consignments.providers}::jsonb ? ${provider}`;
+    // FIX for providers: string[] JSON array
+    const providerFilter = sql`${consignments.providers}::jsonb ? ${providerKey}`;
 
     /* -------- STATS -------- */
     const statsQuery = await db
@@ -44,9 +44,7 @@ export async function GET(
         `,
       })
       .from(consignments)
-      .where(
-        and(eq(consignments.client_id, clientId), providerFilter)
-      );
+      .where(and(eq(consignments.client_id, clientId), providerFilter));
 
     const stats = statsQuery[0] ?? {
       total: 0,
