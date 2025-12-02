@@ -1,4 +1,9 @@
-export default function InvoiceBreakdown({ awb, pricing }) {
+interface InvoiceBreakdownProps {
+  awb: string;
+  pricing: any; // or a proper type if you have it
+}
+
+export default function InvoiceBreakdown({ awb, pricing }: InvoiceBreakdownProps) {
   if (!pricing) return null;
 
   return (
