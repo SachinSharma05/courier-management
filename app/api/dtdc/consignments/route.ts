@@ -3,6 +3,16 @@ import { db } from "@/lib/db/postgres";
 import { consignments, trackingEvents } from "@/db/schema";
 import { eq, sql, inArray, and, ilike, gte, lte, desc, asc } from "drizzle-orm";
 
+type TrackingEvent = {
+  consignmentId: string;
+  action: string;
+  actionDate: string | Date | null;
+  actionTime: string | Date | null;
+  origin: string | null;
+  destination: string | null;
+  remarks: string | null;
+};
+
 // ------------------------------
 // Helper: TAT Computation
 // ------------------------------
@@ -63,19 +73,19 @@ export async function GET(req: Request) {
 
     if (search) where.push(ilike(consignments.awb, `%${search}%`));
     if (status === "delivered") {
-  where.push(sql`LOWER(last_status) LIKE '%deliver%'`);
-}
+      where.push(sql`LOWER(last_status) LIKE '%deliver%'`);
+    }
 
-else if (status === "rto") {
-  where.push(sql`LOWER(last_status) LIKE '%rto%'`);
-}
+    else if (status === "rto") {
+      where.push(sql`LOWER(last_status) LIKE '%rto%'`);
+    }
 
-else if (status === "pending-group") {
-  where.push(sql`
-    LOWER(last_status) NOT LIKE '%deliver%' 
-    AND LOWER(last_status) NOT LIKE '%rto%'
-  `);
-}
+    else if (status === "pending-group") {
+      where.push(sql`
+        LOWER(last_status) NOT LIKE '%deliver%' 
+        AND LOWER(last_status) NOT LIKE '%rto%'
+      `);
+    }
 
     if (from) where.push(gte(consignments.bookedOn, from));
     if (to) where.push(lte(consignments.bookedOn, to));
@@ -137,20 +147,23 @@ else if (status === "pending-group") {
     // --------------------
     const eventMap = new Map<string, any[]>();
 
-    for (const ev of events) {
-      const consignmentId = ev.consignmentId; // UUID string
-
+    for (const ev of events as TrackingEvent[]) {
       const actionDate =
         typeof ev.actionDate === "string"
           ? ev.actionDate
-          : ev.actionDate?.toISOString?.()?.slice(0, 10) ?? null;
+          : ev.actionDate instanceof Date
+          ? ev.actionDate.toISOString().slice(0, 10)
+          : null;
 
       const actionTime =
         typeof ev.actionTime === "string"
           ? ev.actionTime
-          : ev.actionTime?.toISOString?.()?.slice(11, 19) ?? null;
+          : ev.actionTime instanceof Date
+          ? ev.actionTime.toISOString().slice(11, 19)
+          : null;
 
-      const list = eventMap.get(consignmentId) ?? [];
+      const list = eventMap.get(ev.consignmentId) ?? [];
+
       list.push({
         action: ev.action,
         actionDate,
@@ -160,7 +173,7 @@ else if (status === "pending-group") {
         remarks: ev.remarks,
       });
 
-      eventMap.set(consignmentId, list);
+      eventMap.set(ev.consignmentId, list);
     }
 
     // --------------------
