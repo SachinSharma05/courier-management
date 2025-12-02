@@ -124,7 +124,7 @@ export default function BulkBookingPage() {
                   {rows.map((row, i) => (
                     <tr key={i} className="border-b">
                       {Object.values(row).map((v, i2) => (
-                        <td key={i2} className="px-3 py-2">{v}</td>
+                        <td key={i2} className="px-3 py-2">{String(v)}</td>
                       ))}
                     </tr>
                   ))}
