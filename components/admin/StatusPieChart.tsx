@@ -19,7 +19,7 @@ export default function StatusPieChart({
   if (!data || data.length === 0)
     return <div className="text-sm text-muted-foreground">No status data available</div>;
 
-  // normalize labels (shorten long ones)
+  // Normalize
   const normalized = data.map((d) => ({
     status: d.status,
     count: d.count,
@@ -31,6 +31,7 @@ export default function StatusPieChart({
         <PieChart>
           <Tooltip formatter={(value: number, name: string) => [`${value}`, name]} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
+
           <Pie
             data={normalized}
             dataKey="count"
@@ -38,12 +39,13 @@ export default function StatusPieChart({
             cx="50%"
             cy="50%"
             outerRadius={90}
-            label={({ status, count }) => `${status}: ${count}`}
+            label={({ name, value }) => `${name}: ${value}`}   // FIXED
           >
             {normalized.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
           </Pie>
+
         </PieChart>
       </ResponsiveContainer>
     </div>
