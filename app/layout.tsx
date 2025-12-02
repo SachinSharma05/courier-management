@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { Toaster } from "react-hot-toast"; // shadcn or react-hot-toast

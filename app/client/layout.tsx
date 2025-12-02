@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import ClientShell from "@/components/layout/ClientShell";
 import { getServerSession } from "@/lib/auth/getServerSession";
 import { redirect } from "next/navigation";
