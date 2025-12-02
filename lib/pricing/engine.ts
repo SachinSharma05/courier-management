@@ -7,7 +7,7 @@ import {
   courierDistanceSlabs,
   courierSurcharges
 } from "@/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 // Map Indian regions into zones
 function getZone(region: string) {
@@ -87,16 +87,14 @@ export async function calculatePrice({
 
   // ---- 2) Weight slab ----
   const [slab] = await db
-    .select()
-    .from(courierWeightSlabs)
-    .where(
-      and(
-        eq(courierWeightSlabs.client_id, clientIdNum),
-        lte(courierWeightSlabs.min_weight, weightNum),
-        gte(courierWeightSlabs.max_weight, weightNum)
-      )
-    )
-    .limit(1);
+  .select()
+  .from(courierWeightSlabs)
+  .where(
+    sql`(${courierWeightSlabs.client_id} = ${clientIdNum})
+      AND (${courierWeightSlabs.min_weight}::numeric <= ${weightNum})
+      AND (${courierWeightSlabs.max_weight}::numeric >= ${weightNum})`
+  )
+  .limit(1);
 
   const weight_charge = slab ? Number(slab.price) : weightNum * 20;
 
