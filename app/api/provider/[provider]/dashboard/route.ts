@@ -1,19 +1,31 @@
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/postgres";
 import { consignments } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { getServerSession } from "@/lib/auth/getServerSession";
-import { sql, desc } from "drizzle-orm";
 
-export async function GET(req, { params }) {
+export async function GET(
+  req: NextRequest,
+  context: { params: { provider: string } }
+) {
   try {
     const session = await getServerSession();
     if (!session.ok) {
-      return Response.json({ ok: false }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: "Not authenticated" },
+        { status: 401 }
+      );
     }
 
-    const provider = params.provider; // dtdc / delhivery / xpressbees
+    const provider = context.params.provider.toLowerCase(); // dtdc / delhivery / xpressbees
     const clientId = session.user.id;
 
+    /* -------------------------
+       Provider filter FIXED
+    --------------------------*/
+    const providerFilter = sql`${consignments.providers}::jsonb ? ${provider}`;
+
+    /* -------- STATS -------- */
     const statsQuery = await db
       .select({
         total: sql<number>`COUNT(*)`,
@@ -33,10 +45,7 @@ export async function GET(req, { params }) {
       })
       .from(consignments)
       .where(
-        and(
-          eq(consignments.client_id, clientId),
-          eq(consignments.providers, provider)
-        )
+        and(eq(consignments.client_id, clientId), providerFilter)
       );
 
     const stats = statsQuery[0] ?? {
@@ -46,25 +55,24 @@ export async function GET(req, { params }) {
       rto: 0,
     };
 
+    /* -------- LATEST -------- */
     const latest = await db
       .select()
       .from(consignments)
-      .where(
-        and(
-          eq(consignments.client_id, clientId),
-          eq(consignments.providers, provider)
-        )
-      )
+      .where(and(eq(consignments.client_id, clientId), providerFilter))
       .orderBy(desc(consignments.createdAt))
       .limit(10);
 
-    return Response.json({
+    return NextResponse.json({
       ok: true,
       stats,
       latest,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Provider dashboard error:", err);
-    return Response.json({ ok: false }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: err.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
