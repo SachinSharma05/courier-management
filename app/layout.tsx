@@ -1,6 +1,5 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
-import Navbar from "@/components/ui/navbar"; // if you want navbar globally
 import { Toaster } from "react-hot-toast"; // shadcn or react-hot-toast
 
 const inter = Inter({ subsets: ["latin"] });
