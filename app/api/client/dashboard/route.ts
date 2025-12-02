@@ -23,6 +23,7 @@ export async function GET() {
     if (typeof providers === "string") providers = JSON.parse(providers);
 
     // QUERY: All consignments of this client across all allowed providers
+    const pgArray = `ARRAY[${providers.map(p => `'${p}'`).join(",")}]`;
     const statsQuery = await db
       .select({
         total: sql<number>`COUNT(*)`,
@@ -40,7 +41,7 @@ export async function GET() {
       .where(
         and(
           eq(consignments.client_id, clientId),
-          inArray(consignments.providers, providers)
+          sql`${consignments.providers}::jsonb ?| ${sql.raw(pgArray)}`
         )
       );
 
@@ -57,7 +58,7 @@ export async function GET() {
       .where(
         and(
           eq(consignments.client_id, clientId),
-          inArray(consignments.providers, providers)
+          sql`${consignments.providers}::jsonb ?| ${sql.raw(pgArray)}`
         )
       )
       .orderBy(desc(consignments.createdAt))
