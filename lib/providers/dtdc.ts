@@ -1,8 +1,4 @@
 // lib/providers/dtdc.ts
-import type { Awaitable } from "type-fest";
-
-// lib/providers/dtdc.ts
-
 export type DtdcBookingCredentials = {
   customer_code?: string;
   username?: string;
