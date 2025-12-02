@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { getIronSession, sessionOptions } from "@/lib/auth/session";
+import { getIronSession } from "iron-session";
+import { sessionOptions } from "@/lib/auth/session";
 import { getClientProviderCredentials } from "@/lib/providerAuth";
 import { makeDTDCClient } from "@/lib/providers/dtdc";
 import { calculatePrice } from "@/lib/pricing/engine";
+import { AppSession } from "@/types/session";
 
 export async function POST(req: Request) {
   try {
     const res = new Response();
-    const session = await getIronSession(req, res, sessionOptions);
+    const session = await getIronSession<AppSession>(req, res, sessionOptions);
 
     // Now TS recognizes "session.user"
     if (!session.user) {
