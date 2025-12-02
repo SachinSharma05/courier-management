@@ -96,7 +96,7 @@ export const courierSurcharges = pgTable("courier_surcharges", {
   id: serial("id").primaryKey(),
   client_id: integer("client_id").notNull(),
   load_type: text("load_type").notNull(), // NON-DOCUMENT
-  price: numeric("price").notNull(),
+  price: integer("price").notNull(),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
