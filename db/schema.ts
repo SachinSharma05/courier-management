@@ -68,6 +68,7 @@ export const courierWeightSlabs = pgTable("courier_weight_slabs", {
   min_weight: numeric("min_weight").notNull(),
   max_weight: numeric("max_weight").notNull(),
   price: numeric("price").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 // service types (STANDARD / PRIORITY etc.)
@@ -77,6 +78,7 @@ export const courierServices = pgTable("courier_services", {
   code: text("code").notNull(), // STANDARD, PRIORITY
   base_price: numeric("base_price").notNull(),
   priority_multiplier: numeric("priority_multiplier").notNull().default("1"),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 // distance slabs in KM
@@ -85,7 +87,8 @@ export const courierDistanceSlabs = pgTable("courier_distance_slabs", {
   client_id: integer("client_id").notNull(),
   min_km: integer("min_km").notNull(),
   max_km: integer("max_km").notNull(),
-  price: numeric("price").notNull(),
+  price: integer("price").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 // surcharges
@@ -94,6 +97,7 @@ export const courierSurcharges = pgTable("courier_surcharges", {
   client_id: integer("client_id").notNull(),
   load_type: text("load_type").notNull(), // NON-DOCUMENT
   price: numeric("price").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const providers = pgTable("providers", {
