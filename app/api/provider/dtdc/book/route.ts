@@ -9,27 +9,37 @@ export async function POST(req: Request) {
     const res = new Response();
     const session = await getIronSession(req, res, sessionOptions);
 
+    // Now TS recognizes "session.user"
     if (!session.user) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
     const body = await req.json();
     const consignments = body.consignments;
 
     if (!Array.isArray(consignments) || consignments.length === 0) {
-      return NextResponse.json({ ok: false, error: "consignments[] required" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "consignments[] required" },
+        { status: 400 }
+      );
     }
 
-    // Load client DTDC creds
-    const { credentials } = await getClientProviderCredentials(session.user.id, "dtdc");
-    const client = makeDTDCClient(credentials);
+    const { credentials } = await getClientProviderCredentials(
+      session.user.id,
+      "dtdc"
+    );
 
+    const client = makeDTDCClient(credentials);
     const result = await client.book(consignments);
 
-    // Extract AWB from DTDC result (update based on actual API)
-    const awb = result?.data?.[0]?.reference_number ?? result?.data?.[0]?.awb_no ?? null;
+    const awb =
+      result?.data?.[0]?.reference_number ??
+      result?.data?.[0]?.awb_no ??
+      null;
 
-    // Calculate price for THIS consignment
     const c = consignments[0];
 
     const pricing = await calculatePrice({
@@ -48,6 +58,9 @@ export async function POST(req: Request) {
       awb,
     });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: err.message },
+      { status: 500 }
+    );
   }
 }
