@@ -1,18 +1,25 @@
-import { getIronSession } from "iron-session";
+import { getIronSession, IronSession } from "iron-session";
 import { sessionOptions } from "@/lib/auth/session";
 import { NextResponse } from "next/server";
+
+type SessionUser = { id: number; username: string; role: string };
 
 export async function GET(req: Request) {
   const res = new NextResponse();
 
   const session = await getIronSession(req, res, sessionOptions);
 
-  if (!session.user) {
+  // Cast session properly
+  const s = session as unknown as IronSession<Record<string, unknown>> & {
+    user?: SessionUser;
+  };
+
+  if (!s.user) {
     return NextResponse.json({ ok: false });
   }
 
   return NextResponse.json({
     ok: true,
-    user: session.user,
+    user: s.user,
   });
 }
