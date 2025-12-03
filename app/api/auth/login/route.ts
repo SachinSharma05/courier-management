@@ -4,7 +4,6 @@ import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { sessionOptions } from "@/lib/auth/session";
-import type { IronSession } from "iron-session";
 
 type SessionUser = {
   id: number;
@@ -53,10 +52,11 @@ export async function POST(req: Request) {
       user: { id: user.id, username: user.username, role: user.role },
     });
 
-    const session = await getIronSession(req, res, sessionOptions);
+    const session: any = await getIronSession(req, res, sessionOptions);
     console.log("session object created:", session);
 
-    (session as IronSession<{ user?: SessionUser }>).user = {
+    // attach user to the session
+    session.user = {
       id: user.id,
       username: user.username,
       role: user.role,
@@ -64,12 +64,12 @@ export async function POST(req: Request) {
 
     console.log("saving session…");
     await session.save();
-
     console.log("session saved successfully");
+
     return res;
 
   } catch (err: any) {
-    console.error("Login Error:", err);
+    console.error("Login Error:", err?.message || err);
     return NextResponse.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }
