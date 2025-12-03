@@ -4,27 +4,32 @@ import { cookies } from "next/headers";
 
 export async function getServerSession() {
   try {
-    // ✔ Your project requires await here
     const cookieStore = await cookies();
-
     const token = cookieStore.get("cms_session")?.value;
 
     if (!token) return { ok: false };
 
-    const base =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.VERCEL_URL ||
-      "";
+    // Build ABSOLUTE URL for Vercel
+    let base = process.env.NEXT_PUBLIC_APP_URL 
+            || process.env.VERCEL_PROJECT_PRODUCTION_URL 
+            || process.env.VERCEL_URL;
 
-    const normalized = base.endsWith("/")
-      ? base.slice(0, -1)
-      : base;
+    if (!base) {
+      // local dev
+      base = "http://localhost:3000";
+    }
 
-    const url = normalized.startsWith("http")
-      ? normalized
-      : `https://${normalized}`;
+    // Normalize to always include https://
+    if (!base.startsWith("http")) {
+      base = `https://${base}`;
+    }
 
-    const res = await fetch(`${url}/api/auth/session`, {
+    // Remove trailing slash
+    if (base.endsWith("/")) {
+      base = base.slice(0, -1);
+    }
+
+    const res = await fetch(`${base}/api/auth/session`, {
       method: "GET",
       headers: {
         Cookie: `cms_session=${token}`,
