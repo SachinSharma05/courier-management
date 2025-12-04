@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, serial, text, varchar, timestamp, uuid, date, time, integer, boolean, numeric, json, unique } from "drizzle-orm/pg-core";
 
 // CONSIGNMENTS
@@ -121,4 +122,48 @@ export const users = pgTable("users", {
   providers: json("providers").$type<string[]>().default([]),
   is_active: boolean("is_active").notNull().default(true),
   created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
+// db/schema/billing.ts
+export const invoices = pgTable("invoices", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(), // requires pgcrypto or pgcrypto extension / gen_random_uuid
+  client_id: integer("client_id").notNull(),
+  month: varchar("month", { length: 20 }).default(sql`TO_CHAR(NOW(), 'YYYY-MM')`), // e.g., '2024-11'
+  total_amount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  paid_amount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("unpaid"), // paid | unpaid | partial
+  note: text("note"),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const invoice_items = pgTable("invoice_items", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  invoice_id: uuid("invoice_id").notNull(),
+  awb: varchar("awb", { length: 128 }).notNull(),
+  charge: numeric("charge", { precision: 12, scale: 2 }).notNull(),
+  weight: numeric("weight", { precision: 8, scale: 2 }),
+  zone: varchar("zone", { length: 50 }).default(""),
+  provider: varchar("provider", { length: 50 }).default(""),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const payments = pgTable("payments", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  invoice_id: uuid("invoice_id").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  method: varchar("method", { length: 50 }).default("manual"),
+  reference: varchar("reference", { length: 255 }).default(""),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const complaints = pgTable("complaints", {
+  id: serial("id").primaryKey(),
+  client_id: integer("client_id").notNull(),   // FK → users.id
+  awb: varchar("awb", { length: 50 }).notNull(),
+  message: text("message").notNull(),
+  status: varchar("status", { length: 20 }).default("open").notNull(), 
+  // status → open | in_progress | resolved
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
 });

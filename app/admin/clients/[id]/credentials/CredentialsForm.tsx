@@ -3,11 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-type Provider = { id: number; name: string };
 type ProviderItem = { id: number; name: string };
 
 export default function CredentialsForm({ id }: { id: string }) {
@@ -15,8 +20,8 @@ export default function CredentialsForm({ id }: { id: string }) {
 
   const [creds, setCreds] = useState<any>(null);
   const [masked, setMasked] = useState<{ [key: string]: boolean }>({});
-
   const [selectedProvider, setSelectedProvider] = useState<number | null>(null);
+
   const { data: providersData } = useSWR("/api/admin/providers", fetcher);
   const providers: ProviderItem[] = providersData?.providers ?? [];
 
@@ -30,9 +35,10 @@ export default function CredentialsForm({ id }: { id: string }) {
         return;
       }
 
+      // Load stored credentials
       setCreds(json.credentials);
 
-      // mask sensitive fields by default
+      // Mask sensitive fields
       setMasked({
         password: true,
         api_token: true,
@@ -55,7 +61,7 @@ export default function CredentialsForm({ id }: { id: string }) {
       method: "PUT",
       body: JSON.stringify({
         providerId: selectedProvider,
-        ...creds,
+        ...creds, // ALL fields go here INCLUDING DTDC_CUSTOMER_CODE
       }),
     });
 
@@ -65,66 +71,100 @@ export default function CredentialsForm({ id }: { id: string }) {
     else alert(json.error);
   }
 
-  const providerOptions = providers.map((p) => ({
-    id: p.id,
-    name: p.name
-  }));
-
   return (
     <div className="max-w-xl space-y-6 p-6 bg-white shadow rounded-lg">
       <h1 className="text-2xl font-semibold">API Credentials</h1>
 
+      {/* PROVIDER SELECT */}
       <div>
-  <label className="block text-sm font-semibold mb-1">Provider</label>
+        <label className="block text-sm font-semibold mb-1">Provider</label>
 
-  <Select
-    value={selectedProvider ? String(selectedProvider) : "none"}
-    onValueChange={(v) => {
-      if (v === "none") setSelectedProvider(null);
-      else setSelectedProvider(Number(v));
-    }}
-  >
-    <SelectTrigger className="w-44">
-      <SelectValue placeholder="-- Select Provider --" />
-    </SelectTrigger>
+        <Select
+          value={selectedProvider ? String(selectedProvider) : "none"}
+          onValueChange={(v) => {
+            if (v === "none") setSelectedProvider(null);
+            else setSelectedProvider(Number(v));
+          }}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="-- Select Provider --" />
+          </SelectTrigger>
 
-    <SelectContent>
-      <SelectItem value="none">-- Select Provider --</SelectItem>
-      {providers.map((p) => (
-        <SelectItem key={p.id} value={String(p.id)}>
-          {p.name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
+          <SelectContent>
+            <SelectItem value="none">-- Select Provider --</SelectItem>
+            {providers.map((p) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
+      {/** ---------------------------------------------------------------- **/}
+      {/** ADD CUSTOMER CODE FIELD (ALWAYS SHOWN, SAVED AS env_key = DTDC_CUSTOMER_CODE) **/}
+      {/** ---------------------------------------------------------------- **/}
 
-      {Object.keys(creds).map((key) => (
-        <div key={key}>
-          <label className="block text-sm font-semibold mb-1 flex justify-between">
-            {key}
-            {(key === "password" || key === "api_key" || key === "api_token") && (
-              <button
-                type="button"
-                className="text-xs underline"
-                onClick={() => setMasked(m => ({ ...m, [key]: !m[key] }))}
-              >
-                {masked[key] ? "Show" : "Hide"}
-              </button>
-            )}
-          </label>
+      <div>
+        <label className="block text-sm font-semibold mb-1">
+          DTDC_CUSTOMER_CODE
+        </label>
 
-          <input
-            type={masked[key] ? "password" : "text"}
-            className="border p-2 rounded w-full"
-            value={creds[key] ?? ""}
-            onChange={(e) =>
-              setCreds({ ...creds, [key]: e.target.value })
-            }
-          />
-        </div>
-      ))}
+        <input
+          type="text"
+          className="border p-2 rounded w-full"
+          value={creds["DTDC_CUSTOMER_CODE"] ?? ""}
+          onChange={(e) =>
+            setCreds({ ...creds, DTDC_CUSTOMER_CODE: e.target.value })
+          }
+        />
+      </div>
+
+      {/** ---------------------------------------------------------------- **/}
+      {/** EXISTING CREDENTIAL FIELDS (UNCHANGED)                          **/}
+      {/** ---------------------------------------------------------------- **/}
+
+      {Object.keys(creds).map((key) => {
+        // Skip customer code because we already handled it
+        if (key === "DTDC_CUSTOMER_CODE") return null;
+
+        return (
+          <div key={key}>
+            <label className="block text-sm font-semibold mb-1 flex justify-between">
+              {key}
+
+              {(key === "password" ||
+                key === "api_key" ||
+                key === "api_token") && (
+                <button
+                  type="button"
+                  className="text-xs underline"
+                  onClick={() =>
+                    setMasked((m) => ({
+                      ...m,
+                      [key]: !m[key],
+                    }))
+                  }
+                >
+                  {masked[key] ? "Show" : "Hide"}
+                </button>
+              )}
+            </label>
+
+            <input
+              type={masked[key] ? "password" : "text"}
+              className="border p-2 rounded w-full"
+              value={creds[key] ?? ""}
+              onChange={(e) =>
+                setCreds({
+                  ...creds,
+                  [key]: e.target.value,
+                })
+              }
+            />
+          </div>
+        );
+      })}
 
       <button
         onClick={save}

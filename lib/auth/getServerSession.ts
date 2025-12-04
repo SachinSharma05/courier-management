@@ -1,3 +1,4 @@
+// lib/auth/getServerSession
 export const dynamic = "force-dynamic";
 
 import { cookies } from "next/headers";

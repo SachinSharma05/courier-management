@@ -37,6 +37,7 @@ export async function GET(req: Request, context: any) {
     password: "",
     api_token: "",
     api_key: "",
+    DTDC_CUSTOMER_CODE: "",   // 🔥 ADDED HERE
   };
 
   for (const row of credsRows) {
@@ -65,10 +66,17 @@ export async function PUT(req: Request, context: any) {
     return NextResponse.json({ ok: false, error: "ProviderId is required" });
   }
 
-  const fields = ["username", "password", "api_token", "api_key"];
+  // ⬅️ Add DTDC_CUSTOMER_CODE to your existing allowed fields
+  const fields = [
+    "username",
+    "password",
+    "api_token",
+    "api_key",
+    "DTDC_CUSTOMER_CODE",   // 🔥 ADDED HERE
+  ];
 
   for (const key of fields) {
-    if (!body[key]) continue;
+    if (!body[key]) continue; // skip empty fields
 
     const encrypted = encrypt(body[key]);
 

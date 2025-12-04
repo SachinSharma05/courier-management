@@ -1,46 +1,36 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/postgres";
-import { consignments, trackingEvents } from "@/db/schema";
-import { eq, sql, inArray, and, ilike, gte, lte, desc, asc } from "drizzle-orm";
+import { consignments } from "@/db/schema";
+import {
+  eq,
+  sql,
+  and,
+  ilike,
+  gte,
+  lte,
+} from "drizzle-orm";
 
-type TrackingEvent = {
-  consignmentId: string;
-  action: string;
-  actionDate: string | Date | null;
-  actionTime: string | Date | null;
-  origin: string | null;
-  destination: string | null;
-  remarks: string | null;
-};
-
-// ------------------------------
-// Helper: TAT Computation
-// ------------------------------
-function computeTAT(awb: string | undefined, bookedOn: string | null) {
+// ------------ Helpers ------------
+function computeTAT(r: any) {
   const rules: Record<string, number> = { D: 3, M: 5, N: 7, I: 10 };
-  if (!bookedOn) return "On Time";
+  const prefix = r.awb?.charAt(0)?.toUpperCase();
+  if (!r.booked_on) return "On Time";
 
-  const prefix = (awb?.charAt?.(0) ?? "").toUpperCase();
-  const allowed = rules[prefix] ?? 5;
-
-  const age = Math.floor((Date.now() - new Date(bookedOn).getTime()) / 86400000);
+  const allowed = rules[prefix as string] ?? 5;
+  const age = Math.floor((Date.now() - new Date(r.booked_on).getTime()) / 86400000);
 
   if (age > allowed + 3) return "Very Critical";
   if (age > allowed) return "Critical";
   if (age >= allowed - 1) return "Warning";
-
   return "On Time";
 }
 
-// ------------------------------
-// Helper: Movement Computation
-// ------------------------------
 function computeMovement(timeline: any[]) {
-  if (!timeline?.length) return "On Time";
+  if (!timeline.length) return "On Time";
 
   const last = timeline[0];
   const ts = new Date(`${last.actionDate}T${last.actionTime ?? "00:00:00"}`).getTime();
-  const hours = Math.floor((Date.now() - ts) / (3600 * 1000));
+  const hours = Math.floor((Date.now() - ts) / 3600_000);
 
   if (hours >= 72) return "Stuck (72+ hrs)";
   if (hours >= 48) return "Slow (48 hrs)";
@@ -48,156 +38,133 @@ function computeMovement(timeline: any[]) {
   return "On Time";
 }
 
-// ------------------------------
-// GET Handler
-// ------------------------------
+// ------------ GET Handler ------------
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
 
     const page = Number(url.searchParams.get("page") ?? "1");
     const pageSize = Number(url.searchParams.get("pageSize") ?? "50");
+    const offset = (page - 1) * pageSize;
 
     const search = url.searchParams.get("search") ?? "";
     const status = url.searchParams.get("status") ?? "";
     const from = url.searchParams.get("from") ?? "";
     const to = url.searchParams.get("to") ?? "";
-    const clientId = url.searchParams.get("clientId") ?? "";
-    const provider = url.searchParams.get("provider") ?? "";
     const tatFilter = url.searchParams.get("tat") ?? "all";
 
-    // --------------------
-    // WHERE CLAUSE
-    // --------------------
-    const where: any[] = [];
+    const clientIdParam = url.searchParams.get("clientId");
+    if (!clientIdParam) {
+      return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+    }
+    const clientId = Number(clientIdParam);
+
+    // --------------------------
+    // BUILD DRIZZLE WHERE CLAUSE
+    // --------------------------
+    const where = [eq(consignments.client_id, clientId)];
 
     if (search) where.push(ilike(consignments.awb, `%${search}%`));
-    if (status === "delivered") {
+
+    const s = status.toLowerCase();
+
+    if (s === "delivered") {
       where.push(sql`LOWER(last_status) LIKE '%deliver%'`);
-    }
-
-    else if (status === "rto") {
+    } else if (s === "rto") {
       where.push(sql`LOWER(last_status) LIKE '%rto%'`);
-    }
-
-    else if (status === "pending-group") {
+    } else if (s === "pending-group") {
       where.push(sql`
         LOWER(last_status) NOT LIKE '%deliver%' 
         AND LOWER(last_status) NOT LIKE '%rto%'
       `);
+    } else if (s === "in transit") {
+      where.push(sql`LOWER(last_status) LIKE '%transit%'`);
+    } else if (s === "out for delivery") {
+      where.push(sql`LOWER(last_status) LIKE '%out for delivery%'`);
+    } else if (s === "attempted") {
+      where.push(sql`LOWER(last_status) LIKE '%attempt%'`);
+    } else if (s === "held") {
+      where.push(sql`LOWER(last_status) LIKE '%held%'`);
     }
 
     if (from) where.push(gte(consignments.bookedOn, from));
     if (to) where.push(lte(consignments.bookedOn, to));
-    if (clientId) where.push(eq(consignments.client_id, Number(clientId)));
-    if (provider) {
-      where.push(
-        sql`${provider} = ANY (string_to_array(array_to_string(providers, ','), ','))`
-      );
-    }
 
-    const finalWhere = where.length ? and(...where) : undefined;
+    const finalWhere = and(...where);
 
-    // --------------------
-    // COUNT
-    // --------------------
-    const totalRes = await db
+    // --------------------------
+    // COUNT QUERY USING DRIZZLE
+    // (SAFE, NO RAW SQL ALIAS ISSUE)
+    // --------------------------
+    const countRes = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(consignments)
       .where(finalWhere);
 
-    const totalCount = totalRes[0]?.count ?? 0;
+    const totalCount = countRes[0].count;
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    const offset = (page - 1) * pageSize;
 
-    // --------------------
-    // QUERY CONSIGNMENTS
-    // --------------------
-    const rows = await db
-      .select()
-      .from(consignments)
-      .where(finalWhere)
-      .orderBy(desc(consignments.lastUpdatedOn), asc(consignments.awb))
-      .limit(pageSize)
-      .offset(offset);
+    // --------------------------
+    // MAIN RAW SQL QUERY
+    // with alias `c`
+    // and explicit WHERE condition inserted manually
+    // --------------------------
+    const rows = await db.execute(sql`
+      SELECT
+        c.id,
+        c.awb,
+        c.origin,
+        c.destination,
+        c.last_status,
+        c.booked_on,
+        c.last_updated_on,
 
-    if (!rows.length) {
-      return NextResponse.json({
-        items: [],
-        totalPages,
-        totalCount,
-        page,
-        pageSize,
-      });
-    }
+        COALESCE((
+          SELECT json_agg(t ORDER BY t."actionDate" DESC, t."actionTime" DESC)
+          FROM (
+            SELECT
+              e.action,
+              e.action_date AS "actionDate",
+              e.action_time AS "actionTime",
+              e.origin,
+              e.destination,
+              e.remarks
+            FROM tracking_events e
+            WHERE e.consignment_id = c.id
+          ) t
+        ), '[]') AS timeline
 
-    // --------------------
-    // FETCH TIMELINE
-    // --------------------
-    const ids = rows.map((r) => r.id); // UUID[]
+      FROM consignments c
+      WHERE c.client_id = ${clientId}   -- FIXED alias
+      ORDER BY c.last_updated_on DESC, c.awb ASC
+      LIMIT ${pageSize}
+      OFFSET ${offset}
+    `);
 
-    const events = await db
-      .select()
-      .from(trackingEvents)
-      .where(inArray(trackingEvents.consignmentId, ids))
-      .orderBy(desc(trackingEvents.actionDate), desc(trackingEvents.actionTime));
+    // --------------------------
+    // FINAL RESPONSE BUILD
+    // --------------------------
+    const items = rows.rows
+      .map((r: any) => {
+        const tat = computeTAT(r);
+        const movement = computeMovement(r.timeline ?? []);
 
-    // --------------------
-    // FIX: USE UUID KEYS (STRING)
-    // --------------------
-    const eventMap = new Map<string, any[]>();
-
-    for (const ev of events as TrackingEvent[]) {
-      const actionDate =
-        typeof ev.actionDate === "string"
-          ? ev.actionDate
-          : ev.actionDate instanceof Date
-          ? ev.actionDate.toISOString().slice(0, 10)
-          : null;
-
-      const actionTime =
-        typeof ev.actionTime === "string"
-          ? ev.actionTime
-          : ev.actionTime instanceof Date
-          ? ev.actionTime.toISOString().slice(11, 19)
-          : null;
-
-      const list = eventMap.get(ev.consignmentId) ?? [];
-
-      list.push({
-        action: ev.action,
-        actionDate,
-        actionTime,
-        origin: ev.origin,
-        destination: ev.destination,
-        remarks: ev.remarks,
-      });
-
-      eventMap.set(ev.consignmentId, list);
-    }
-
-    // --------------------
-    // FINAL OUTPUT
-    // --------------------
-    const items = rows
-      .map((r) => {
-        const timeline = eventMap.get(r.id) ?? [];
-        const tat = computeTAT(r.awb, r.bookedOn);
-        const movement = computeMovement(timeline);
+        if (tatFilter !== "all" && !tat.toLowerCase().includes(tatFilter))
+          return null;
 
         return {
           awb: r.awb,
-          last_status: r.lastStatus,
+          last_status: r.last_status,
           origin: r.origin,
           destination: r.destination,
-          booked_on: r.bookedOn,
-          last_updated_on: r.lastUpdatedOn,
-          timeline,
+          booked_on: r.booked_on,
+          last_updated_on: r.last_updated_on,
+          timeline: r.timeline,
           tat,
           movement,
         };
       })
-      .filter((r) => tatFilter === "all" || r.tat.toLowerCase().includes(tatFilter));
+      .filter(Boolean);
 
     return NextResponse.json({
       items,
@@ -206,8 +173,9 @@ export async function GET(req: Request) {
       page,
       pageSize,
     });
+
   } catch (err: any) {
-    console.error("ERROR /api/dtdc/consignments:", err);
+    console.error(err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

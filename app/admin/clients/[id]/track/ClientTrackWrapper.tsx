@@ -1,7 +1,6 @@
 "use client";
 
 import React, { JSX, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import useSWR from "swr";
 import * as XLSX from "xlsx";
 import dayjs from "dayjs";
 import toast from "react-hot-toast";
@@ -45,8 +44,6 @@ import { Upload, RefreshCw, DownloadCloud, Loader2 } from "lucide-react";
 import { generateCustomLabel } from "@/lib/pdf/generateCustomLabel";
 import { mergePDFs } from "@/lib/pdf/mergePDFs";
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
 type ConsignmentRow = {
   awb: string;
   last_status?: string | null;
@@ -60,23 +57,11 @@ type ConsignmentRow = {
   movement?: string;
 };
 
-type ClientItem = { id: number; username: string };
-type ProviderItem = { id: number; name: string };
-
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_BATCH_SIZE = 25;
 
-export default function TrackPage(): JSX.Element {
-  // SWR dropdowns
-  const { data: clientsData } = useSWR("/api/dtdc/clients", fetcher);
-  const { data: providersData } = useSWR("/api/dtdc/providers", fetcher);
+export default function TrackPage({ clientId }: { clientId: number }): JSX.Element {
 
-  const clients: ClientItem[] = clientsData?.clients ?? [];
-  const providers: ProviderItem[] = providersData?.providers ?? [];
-
-  // selections + upload
-  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState("");
   const [loadedAwbs, setLoadedAwbs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,49 +88,52 @@ export default function TrackPage(): JSX.Element {
 
   // ---------- fetchPage ----------
   const fetchPage = useCallback(
-    async (force = false) => {
-      try {
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
+  async (force = false) => {
+    try {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-        setIsFetching(true);
+      setIsFetching(true);
 
-        const params = new URLSearchParams();
-        params.set("page", String(page));
-        params.set("pageSize", String(pageSize));
-        if (search) params.set("search", search);
-        if (statusFilter && statusFilter !== "all") {
-          if (statusFilter === "pending") {
-            params.set("status", "pending-group");
-          } else {
-            params.set("status", statusFilter.toLowerCase());
-          }
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("pageSize", String(pageSize));
+
+      // filters
+      if (search) params.set("search", search);
+      if (statusFilter && statusFilter !== "all") {
+        if (statusFilter === "pending") {
+          params.set("status", "pending-group");
+        } else {
+          params.set("status", statusFilter.toLowerCase());
         }
-        if (dateFrom) params.set("from", dateFrom);
-        if (dateTo) params.set("to", dateTo);
-        if (tatFilter && tatFilter !== "all") params.set("tat", tatFilter);
-        if (selectedClientId) params.set("clientId", String(selectedClientId));
-        if (selectedProvider) params.set("provider", selectedProvider);
+      }
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
+      if (tatFilter && tatFilter !== "all") params.set("tat", tatFilter);
 
-        const res = await fetch(`/api/dtdc/consignments?${params.toString()}`, {
-          signal: controller.signal,
-        });
+      // REQUIRED FOR MULTI-CLIENT
+      params.set("clientId", String(clientId));  // 🔥 added
 
-        if (!res.ok) {
-          const txt = await res.text();
-          toast.error("Failed to load consignments: " + txt);
-          setRows([]);
-          setTotalPages(1);
-          setTotalCount(0);
-          return;
-        }
+      const res = await fetch(`/api/dtdc/consignments?${params.toString()}`, {
+        signal: controller.signal,
+      });
 
-        const json = await res.json();
-        const items: ConsignmentRow[] = json.items ?? [];
-        setRows(items);
-        setTotalPages(json.totalPages ?? 1);
-        setTotalCount(json.totalCount ?? 0);
+      if (!res.ok) {
+        const txt = await res.text();
+        toast.error("Failed to load consignments: " + txt);
+        setRows([]);
+        setTotalPages(1);
+        setTotalCount(0);
+        return;
+      }
+
+      const json = await res.json();
+      const items: ConsignmentRow[] = json.items ?? [];
+      setRows(items);
+      setTotalPages(json.totalPages ?? 1);
+      setTotalCount(json.totalCount ?? 0);
       } catch (e: any) {
         if (e?.name !== "AbortError") {
           console.error(e);
@@ -155,7 +143,7 @@ export default function TrackPage(): JSX.Element {
         setIsFetching(false);
       }
     },
-    [page, pageSize, search, statusFilter, tatFilter, dateFrom, dateTo, selectedClientId, selectedProvider]
+    [page, pageSize, search, statusFilter, tatFilter, dateFrom, dateTo, clientId] // include clientId
   );
 
   // initial + auto refresh
@@ -175,8 +163,8 @@ export default function TrackPage(): JSX.Element {
 
   // re-fetch when page changes or filters change
   useEffect(() => {
-    fetchPage();
-  }, [page, pageSize, search, statusFilter, tatFilter, dateFrom, dateTo, selectedClientId, selectedProvider]); // eslint-disable-line
+  fetchPage();
+}, [fetchPage]);
 
   // ---------- helpers ----------
   function chunkArray<T>(arr: T[], size: number) {
@@ -211,8 +199,6 @@ export default function TrackPage(): JSX.Element {
 
   // ---------- batch tracking ----------
   async function runBatchTracking() {
-    if (!selectedClientId) return toast.error("Select client");
-    if (!selectedProvider) return toast.error("Select provider");
     if (!loadedAwbs.length) return toast.error("Upload excel AWBs first");
 
     setLoading(true);
@@ -220,17 +206,29 @@ export default function TrackPage(): JSX.Element {
 
     try {
       const chunks = chunkArray(loadedAwbs, DEFAULT_BATCH_SIZE);
+
       for (const c of chunks) {
         const res = await fetch("/api/dtdc/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ consignments: c, clientId: selectedClientId, provider: selectedProvider }),
+          body: JSON.stringify({
+            consignments: c,
+            clientId: clientId,       // 🔥 added
+            provider: "dtdc",         // 🔥 added
+          }),
         });
+
         const json = await res.json();
         if (json?.error) toast.error(json.error);
-        setProgress((p) => ({ ...p, done: Math.min(p.total, p.done + c.length) }));
+
+        setProgress((p) => ({
+          ...p,
+          done: Math.min(p.total, p.done + c.length),
+        }));
+
         await fetchPage(true);
       }
+
       toast.success("Batch tracking completed");
     } catch (e) {
       console.error(e);
@@ -242,13 +240,12 @@ export default function TrackPage(): JSX.Element {
 
   // ---------- retry single ----------
   async function retrySingle(awb: string) {
-    if (!selectedClientId || !selectedProvider) return toast.error("Select client & provider");
     setLoading(true);
     try {
       const res = await fetch("/api/dtdc/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consignments: [awb], clientId: selectedClientId, provider: selectedProvider }),
+        body: JSON.stringify({ consignments: [awb] }),
       });
       const json = await res.json();
       if (json?.error) toast.error(json.error);
@@ -355,9 +352,9 @@ export default function TrackPage(): JSX.Element {
       // generate custom label (returns Uint8Array or ArrayBuffer)
       const customPdf = await generateCustomLabel({
         awb: r.awb,
-        company: "Masala Store Pvt Ltd",
+        company: "VIS Pvt Ltd",
         address: "Indore, Madhya Pradesh",
-        phone: "+91 98765 43210",
+        phone: "+91 9340384339",
       });
 
       // merge (both must be Uint8Array)
@@ -432,39 +429,13 @@ export default function TrackPage(): JSX.Element {
       <Card className="shadow-sm border">
         <CardContent className="py-0">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div>
-                <Select value={selectedClientId ? String(selectedClientId) : "none"} onValueChange={(v) => (v === "none" ? setSelectedClientId(null) : setSelectedClientId(Number(v)))}>
-                  <SelectTrigger className="w-56">
-                    <SelectValue placeholder="-- Select Client --" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-- Select Client --</SelectItem>
-                    {clients.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.username}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Select value={selectedProvider ?? "none"} onValueChange={(v) => (v === "none" ? setSelectedProvider(null) : setSelectedProvider(v))}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue placeholder="-- Select Provider --" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-- Select Provider --</SelectItem>
-                    {providers.map((p) => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             <div className="ml-auto flex items-center gap-3">
               <input id="excelUpload" type="file" accept=".xlsx,.xls" onChange={handleFileInput} className="hidden" />
-              <Button variant="outline" onClick={() => document.getElementById("excelUpload")?.click()} disabled={!selectedClientId || !selectedProvider}>
+              <Button variant="outline" onClick={() => document.getElementById("excelUpload")?.click()}>
                 <Upload className="mr-2 h-4 w-4" /> Upload Excel
               </Button>
 
-              <Button onClick={runBatchTracking} disabled={loading || !loadedAwbs.length || !selectedClientId || !selectedProvider}>
+              <Button onClick={runBatchTracking} disabled={loading || !loadedAwbs.length}>
                 {loading ? <><Loader2 className="animate-spin mr-2" />Tracking...</> : "Track (Batched)"}
               </Button>
             </div>
@@ -717,11 +688,11 @@ export default function TrackPage(): JSX.Element {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" disabled={page === 1} onClick={() => { setPage(1); fetchPage(true); }}>
+          <Button size="sm" variant="ghost" disabled={page === 1} onClick={() => { setPage(1) }}>
             First
           </Button>
 
-          <Button size="sm" variant="ghost" disabled={page === 1} onClick={() => { setPage((p) => Math.max(1, p - 1)); fetchPage(true); }}>
+          <Button size="sm" variant="ghost" disabled={page === 1} onClick={() => { setPage((p) => Math.max(1, p - 1)) }}>
             Prev
           </Button>
 
@@ -739,11 +710,11 @@ export default function TrackPage(): JSX.Element {
 
           {pageNumbers[pageNumbers.length - 1] < totalPages && <span className="px-1">…</span>}
 
-          <Button size="sm" variant="ghost" disabled={page === totalPages} onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); fetchPage(true); }}>
+          <Button size="sm" variant="ghost" disabled={page === totalPages} onClick={() => { setPage((p) => Math.min(totalPages, p + 1)) }}>
             Next
           </Button>
 
-          <Button size="sm" variant="ghost" disabled={page === totalPages} onClick={() => { setPage(totalPages); fetchPage(true); }}>
+          <Button size="sm" variant="ghost" disabled={page === totalPages} onClick={() => { setPage(totalPages) }}>
             Last
           </Button>
 

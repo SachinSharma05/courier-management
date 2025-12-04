@@ -168,6 +168,82 @@ export default function Sidebar({
           isExpanded={isExpanded}
         />
 
+        {isExpanded && (
+          <div className="text-xs text-gray-400 px-3 uppercase">Billing & Finance</div>
+        )}
+
+        <SidebarItem
+          href="/admin/billing"
+          label="Billing Overview"
+          icon={<Layers size={17} />}
+          active={pathname.startsWith("/admin/billing")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/billing/invoices"
+          label="Invoices"
+          icon={<FileText size={17} />}
+          active={pathname.startsWith("/admin/billing/invoices")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/finance"
+          label="Finance Reports"
+          icon={<Package size={17} />}
+          active={pathname.startsWith("/admin/finance")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/payments"
+          label="Payments"
+          icon={<MapPin size={17} />}
+          active={pathname.startsWith("/admin/payments")}
+          isExpanded={isExpanded}
+        />
+
+
+        {/* ==================================== */}
+        {/* COMPLAINTS SECTION                   */}
+        {/* ==================================== */}
+        {isExpanded && (
+          <div className="text-xs text-gray-400 px-3 uppercase mt-4">Complaints</div>
+        )}
+
+        <SidebarItem
+          href="/admin/complaints"
+          label="All Complaints"
+          icon={<Search size={17} />}
+          active={pathname.startsWith("/admin/complaints")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/complaints?status=open"
+          label="Open"
+          icon={<Search size={17} />}
+          active={pathname.includes("status=open")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/complaints?status=in_progress"
+          label="In Progress"
+          icon={<Search size={17} />}
+          active={pathname.includes("status=in_progress")}
+          isExpanded={isExpanded}
+        />
+
+        <SidebarItem
+          href="/admin/complaints?status=resolved"
+          label="Resolved"
+          icon={<Search size={17} />}
+          active={pathname.includes("status=resolved")}
+          isExpanded={isExpanded}
+        />
+
         <SidebarItem
           href="/admin/dtdc/settings"
           label="Settings"
