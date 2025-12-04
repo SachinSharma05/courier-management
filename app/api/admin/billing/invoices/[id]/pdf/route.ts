@@ -5,9 +5,10 @@ import { eq } from "drizzle-orm";
 
 export async function GET(
   req: Request,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
+  try {
+    const { id } = await params;
 
     const invoice = await db
       .select()
@@ -19,11 +20,11 @@ export async function GET(
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
-    // TODO: return generated PDF
     return NextResponse.json({
       message: "PDF generation will go here",
       invoice: invoice[0],
     });
+
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
