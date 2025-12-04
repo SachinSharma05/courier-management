@@ -10,10 +10,13 @@ import {
   lte,
 } from "drizzle-orm";
 
-// ------------ Helpers ------------
+// ------------------------------
+// Helpers
+// ------------------------------
 function computeTAT(r: any) {
   const rules: Record<string, number> = { D: 3, M: 5, N: 7, I: 10 };
   const prefix = r.awb?.charAt(0)?.toUpperCase();
+
   if (!r.booked_on) return "On Time";
 
   const allowed = rules[prefix as string] ?? 5;
@@ -30,7 +33,7 @@ function computeMovement(timeline: any[]) {
 
   const last = timeline[0];
   const ts = new Date(`${last.actionDate}T${last.actionTime ?? "00:00:00"}`).getTime();
-  const hours = Math.floor((Date.now() - ts) / 3600_000);
+  const hours = Math.floor((Date.now() - ts) / (3600 * 1000));
 
   if (hours >= 72) return "Stuck (72+ hrs)";
   if (hours >= 48) return "Slow (48 hrs)";
@@ -38,77 +41,94 @@ function computeMovement(timeline: any[]) {
   return "On Time";
 }
 
-// ------------ GET Handler ------------
+// ------------------------------
+// GET Handler (Fully Fixed)
+// ------------------------------
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
 
+    // Pagination
     const page = Number(url.searchParams.get("page") ?? "1");
     const pageSize = Number(url.searchParams.get("pageSize") ?? "50");
     const offset = (page - 1) * pageSize;
 
-    const search = url.searchParams.get("search") ?? "";
-    const status = url.searchParams.get("status") ?? "";
+    // Filters
+    const search = url.searchParams.get("search")?.trim() ?? "";
+    const status = url.searchParams.get("status")?.trim().toLowerCase() ?? "";
     const from = url.searchParams.get("from") ?? "";
     const to = url.searchParams.get("to") ?? "";
     const tatFilter = url.searchParams.get("tat") ?? "all";
 
     const clientIdParam = url.searchParams.get("clientId");
-    if (!clientIdParam) {
+    if (!clientIdParam)
       return NextResponse.json({ error: "clientId is required" }, { status: 400 });
-    }
+
     const clientId = Number(clientIdParam);
 
-    // --------------------------
-    // BUILD DRIZZLE WHERE CLAUSE
-    // --------------------------
-    const where = [eq(consignments.client_id, clientId)];
+    // ----------------------------------------------
+    // DYNAMIC WHERE BUILDER
+    // ----------------------------------------------
+    const whereClauses: any[] = [];
+    whereClauses.push(sql`c.client_id = ${clientId}`);
 
-    if (search) where.push(ilike(consignments.awb, `%${search}%`));
-
-    const s = status.toLowerCase();
-
-    if (s === "delivered") {
-      where.push(sql`LOWER(last_status) LIKE '%deliver%'`);
-    } else if (s === "rto") {
-      where.push(sql`LOWER(last_status) LIKE '%rto%'`);
-    } else if (s === "pending-group") {
-      where.push(sql`
-        LOWER(last_status) NOT LIKE '%deliver%' 
-        AND LOWER(last_status) NOT LIKE '%rto%'
-      `);
-    } else if (s === "in transit") {
-      where.push(sql`LOWER(last_status) LIKE '%transit%'`);
-    } else if (s === "out for delivery") {
-      where.push(sql`LOWER(last_status) LIKE '%out for delivery%'`);
-    } else if (s === "attempted") {
-      where.push(sql`LOWER(last_status) LIKE '%attempt%'`);
-    } else if (s === "held") {
-      where.push(sql`LOWER(last_status) LIKE '%held%'`);
+    // Search
+    if (search) {
+      whereClauses.push(sql`c.awb ILIKE ${'%' + search + '%'}`);
     }
 
-    if (from) where.push(gte(consignments.bookedOn, from));
-    if (to) where.push(lte(consignments.bookedOn, to));
+    // Status Filters
+    if (status === "delivered") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%deliver%'`);
+    }
+    if (status === "rto") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%rto%'`);
+    }
+    if (status === "in transit") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%transit%'`);
+    }
+    if (status === "out for delivery") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%out for delivery%'`);
+    }
+    if (status === "attempted") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%attempt%'`);
+    }
+    if (status === "held") {
+      whereClauses.push(sql`LOWER(c.last_status) LIKE '%held%'`);
+    }
 
-    const finalWhere = and(...where);
+    // Pending Group
+    if (status === "pending-group") {
+      whereClauses.push(sql`
+        LOWER(c.last_status) NOT LIKE '%deliver%'
+        AND LOWER(c.last_status) NOT LIKE '%rto%'
+      `);
+    }
 
-    // --------------------------
-    // COUNT QUERY USING DRIZZLE
-    // (SAFE, NO RAW SQL ALIAS ISSUE)
-    // --------------------------
-    const countRes = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(consignments)
-      .where(finalWhere);
+    // Date Filters
+    if (from) whereClauses.push(sql`c.booked_on >= ${from}`);
+    if (to) whereClauses.push(sql`c.booked_on <= ${to}`);
 
-    const totalCount = countRes[0].count;
+    // Join WHERE conditions
+    const finalWhere = whereClauses.length
+      ? sql`WHERE ${sql.join(whereClauses, sql` AND `)}`
+      : sql``;
+
+    // ----------------------------------------------
+    // COUNT
+    // ----------------------------------------------
+    const countResult = await db.execute(sql`
+      SELECT COUNT(*) AS count
+      FROM consignments c
+      ${finalWhere}
+    `);
+
+    const totalCount = Number(countResult.rows[0].count ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-    // --------------------------
-    // MAIN RAW SQL QUERY
-    // with alias `c`
-    // and explicit WHERE condition inserted manually
-    // --------------------------
+    // ----------------------------------------------
+    // MAIN QUERY (timeline + filters)
+    // ----------------------------------------------
     const rows = await db.execute(sql`
       SELECT
         c.id,
@@ -135,22 +155,24 @@ export async function GET(req: Request) {
         ), '[]') AS timeline
 
       FROM consignments c
-      WHERE c.client_id = ${clientId}   -- FIXED alias
+      ${finalWhere}
       ORDER BY c.last_updated_on DESC, c.awb ASC
       LIMIT ${pageSize}
       OFFSET ${offset}
     `);
 
-    // --------------------------
-    // FINAL RESPONSE BUILD
-    // --------------------------
+    // ----------------------------------------------
+    // BUILD FINAL PAYLOAD
+    // ----------------------------------------------
     const items = rows.rows
       .map((r: any) => {
         const tat = computeTAT(r);
         const movement = computeMovement(r.timeline ?? []);
 
-        if (tatFilter !== "all" && !tat.toLowerCase().includes(tatFilter))
+        // Apply TAT filter AFTER query (same as before)
+        if (tatFilter !== "all" && !tat.toLowerCase().includes(tatFilter)) {
           return null;
+        }
 
         return {
           awb: r.awb,
@@ -161,7 +183,7 @@ export async function GET(req: Request) {
           last_updated_on: r.last_updated_on,
           timeline: r.timeline,
           tat,
-          movement,
+          movement
         };
       })
       .filter(Boolean);
@@ -171,7 +193,7 @@ export async function GET(req: Request) {
       totalPages,
       totalCount,
       page,
-      pageSize,
+      pageSize
     });
 
   } catch (err: any) {

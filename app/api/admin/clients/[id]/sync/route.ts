@@ -1,6 +1,6 @@
 // app/api/admin/clients/[id]/sync/route.ts
 import { NextResponse } from "next/server";
-import { syncClientShipments } from "@/lib/dtdc/sync";
+// import { syncClientShipments } from "@/lib/dtdc/sync";
 import { getServerSession } from "@/lib/auth/getServerSession"; // your helper
 
 export async function POST(req: Request, context: { params: { id: string } }) {
@@ -15,9 +15,10 @@ export async function POST(req: Request, context: { params: { id: string } }) {
     const id = Number(context.params.id);
     if (!id) return NextResponse.json({ ok: false, error: "Invalid client id" }, { status: 400 });
 
-    const result = await syncClientShipments(id);
+    // const result = await syncClientShipments(id);
 
-    return NextResponse.json({ ok: true, ...result });
+    // return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error("Sync error:", err);
     return NextResponse.json({ ok: false, error: err.message || "Sync failed" }, { status: 500 });
